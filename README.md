@@ -1,4 +1,4 @@
-# 🔍 Chicago Crime Dashboard
+#  Chicago Crime Dashboard
 
 An interactive **R Flexdashboard** for Urban Crime Pattern Analysis and Hotspot Detection using the [Chicago Crime Dataset (2001–2017)](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2) — 4.5 million records.
 
