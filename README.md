@@ -2,7 +2,7 @@
 
 An interactive **R Flexdashboard** for Urban Crime Pattern Analysis and Hotspot Detection using the [Chicago Crime Dataset (2001–2017)](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2) — 4.5 million records.
 
-## 📊 Dashboard Pages
+##  Dashboard Pages
 
 ### 1. Overview
 - **Value Boxes** — Total crimes, arrest rate, most common crime type
@@ -24,7 +24,7 @@ An interactive **R Flexdashboard** for Urban Crime Pattern Analysis and Hotspot 
 - **Linear Regression** — R² = 0.083 analysis & explanation
 - **K-Means** — Cluster size distribution pie chart
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -46,7 +46,7 @@ An interactive **R Flexdashboard** for Urban Crime Pattern Analysis and Hotspot 
 └── ds-lab.ipynb                  # Data preprocessing notebook
 ```
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 - **R** (≥ 4.0)
@@ -68,7 +68,7 @@ rmarkdown::render("chicago_crime_dashboard.Rmd")
 
 > **Note:** You need `crime_data_clean.rds` (245 MB) in the project root to render. This file is excluded from the repo due to GitHub's file size limit. Generate it using `ds-lab.ipynb` or download the dataset from the [Chicago Data Portal](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-present/ijzp-q8t2).
 
-## 📈 Key Insights
+##  Key Insights
 
 - **THEFT** is the most common crime type across all years
 - Crime peaks during **summer months** and in the **afternoon/evening**
@@ -76,6 +76,6 @@ rmarkdown::render("chicago_crime_dashboard.Rmd")
 - Linear regression's low R² (0.083) confirms the non-linear nature of arrest prediction
 - K-Means identifies **5 distinct geographic crime zones** across Chicago
 
-## 📄 License
+##  License
 
 This project is for educational purposes as part of a Data Science Lab course.
