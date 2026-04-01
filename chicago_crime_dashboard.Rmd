@@ -1,0 +1,397 @@
+---
+title: "Chicago Crime Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    theme: cosmo
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(plotly)
+library(leaflet)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(DT)
+
+# Load pre-processed data
+crime_data <- readRDS("crime_data_clean.rds")
+coords_clusters <- readRDS("coords_clusters.rds")
+kmeans_model <- readRDS("kmeans_model.rds")
+rf_model <- readRDS("rf_model.rds")
+```
+
+# Overview
+
+## Row {data-height=120}
+
+### Total Crimes
+
+```{r}
+valueBox(
+  value = format(nrow(crime_data), big.mark = ","),
+  icon = "fa-gavel",
+  color = "danger"
+)
+```
+
+### Arrest Rate
+
+```{r}
+arrest_rate <- round(mean(crime_data$Arrest, na.rm = TRUE) * 100, 1)
+valueBox(
+  value = paste0(arrest_rate, "%"),
+  icon = "fa-handcuffs",
+  color = ifelse(arrest_rate > 30, "success", "warning")
+)
+```
+
+### Most Common Crime
+
+```{r}
+top_crime <- names(sort(table(crime_data$PrimaryType), decreasing = TRUE))[1]
+valueBox(
+  value = top_crime,
+  icon = "fa-exclamation-triangle",
+  color = "primary"
+)
+```
+
+## Row {data-height=880}
+
+### Top 10 Crime Types
+
+```{r}
+top10 <- crime_data %>%
+  count(PrimaryType, sort = TRUE) %>%
+  head(10) %>%
+  mutate(PrimaryType = reorder(PrimaryType, n))
+
+p1 <- plot_ly(
+  top10,
+  x = ~n,
+  y = ~PrimaryType,
+  type = "bar",
+  orientation = "h",
+  marker = list(
+    color = ~n,
+    colorscale = list(c(0, "#440154"), c(0.5, "#21918c"), c(1, "#fde725")),
+    line = list(color = "rgba(0,0,0,0.3)", width = 0.5)
+  ),
+  text = ~paste0(format(n, big.mark = ","), " crimes"),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = list(text = "Top 10 Crime Types", font = list(size = 16)),
+    xaxis = list(title = "Number of Crimes", tickformat = ","),
+    yaxis = list(title = ""),
+    margin = list(l = 150)
+  )
+p1
+```
+
+### Crimes by Hour of Day
+
+```{r}
+hourly <- crime_data %>%
+  count(Hour) %>%
+  mutate(Hour = as.integer(Hour))
+
+p2 <- plot_ly(
+  hourly,
+  x = ~Hour,
+  y = ~n,
+  type = "scatter",
+  mode = "lines+markers",
+  line = list(color = "#e63946", width = 3, shape = "spline"),
+  marker = list(size = 7, color = "#e63946"),
+  text = ~paste0("Hour: ", Hour, ":00\nCrimes: ", format(n, big.mark = ",")),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = list(text = "Crime Distribution by Hour", font = list(size = 16)),
+    xaxis = list(title = "Hour of Day", dtick = 2, range = c(-0.5, 23.5)),
+    yaxis = list(title = "Number of Crimes", tickformat = ",")
+  )
+p2
+```
+
+# Trends
+
+## Row {data-height=500}
+
+### Crimes by Month
+
+```{r}
+monthly <- crime_data %>%
+  count(Month) %>%
+  mutate(MonthName = month.abb[Month])
+
+month_order <- month.abb
+monthly$MonthName <- factor(monthly$MonthName, levels = month_order)
+
+p3 <- plot_ly(
+  monthly,
+  x = ~MonthName,
+  y = ~n,
+  type = "bar",
+  marker = list(
+    color = ~n,
+    colorscale = "Portland",
+    line = list(color = "rgba(0,0,0,0.2)", width = 0.5)
+  ),
+  text = ~paste0(MonthName, ": ", format(n, big.mark = ",")),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = list(text = "Crimes by Month", font = list(size = 16)),
+    xaxis = list(title = "Month"),
+    yaxis = list(title = "Number of Crimes", tickformat = ",")
+  )
+p3
+```
+
+### Crimes by Season
+
+```{r}
+seasonal <- crime_data %>%
+  count(Season) %>%
+  mutate(Season = factor(Season, levels = c("Spring", "Summer", "Fall", "Winter")))
+
+season_colors <- c("Spring" = "#2ecc71", "Summer" = "#e74c3c", "Fall" = "#e67e22", "Winter" = "#3498db")
+
+p4 <- plot_ly(
+  seasonal,
+  x = ~Season,
+  y = ~n,
+  type = "bar",
+  marker = list(color = season_colors[levels(seasonal$Season)]),
+  text = ~paste0(Season, ": ", format(n, big.mark = ",")),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = list(text = "Crimes by Season", font = list(size = 16)),
+    xaxis = list(title = "Season"),
+    yaxis = list(title = "Number of Crimes", tickformat = ",")
+  )
+p4
+```
+
+## Row {data-height=500}
+
+### Crimes by Year
+
+```{r}
+yearly <- crime_data %>%
+  count(Year)
+
+p5 <- plot_ly(
+  yearly,
+  x = ~Year,
+  y = ~n,
+  type = "scatter",
+  mode = "lines+markers",
+  line = list(color = "#6c5ce7", width = 3),
+  marker = list(size = 6, color = "#6c5ce7"),
+  text = ~paste0("Year: ", Year, "\nCrimes: ", format(n, big.mark = ",")),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = list(text = "Crime Trends by Year", font = list(size = 16)),
+    xaxis = list(title = "Year", dtick = 2),
+    yaxis = list(title = "Number of Crimes", tickformat = ",")
+  )
+p5
+```
+
+### Crime Type vs Time of Day Heatmap
+
+```{r}
+# Get top 10 crime types for readability
+top_types <- crime_data %>%
+  count(PrimaryType, sort = TRUE) %>%
+  head(10) %>%
+  pull(PrimaryType)
+
+heatmap_data <- crime_data %>%
+  filter(PrimaryType %in% top_types) %>%
+  count(PrimaryType, TimeOfDay) %>%
+  tidyr::pivot_wider(names_from = TimeOfDay, values_from = n, values_fill = 0)
+
+time_periods <- intersect(c("Morning", "Afternoon", "Evening", "Night"), colnames(heatmap_data))
+
+heat_matrix <- as.matrix(heatmap_data[, time_periods])
+rownames(heat_matrix) <- heatmap_data$PrimaryType
+
+p6 <- plot_ly(
+  x = time_periods,
+  y = heatmap_data$PrimaryType,
+  z = heat_matrix,
+  type = "heatmap",
+  colorscale = "YlOrRd",
+  text = format(heat_matrix, big.mark = ","),
+  hovertemplate = "Crime: %{y}<br>Time: %{x}<br>Count: %{text}<extra></extra>"
+) %>%
+  layout(
+    title = list(text = "Crime Type vs Time of Day", font = list(size = 16)),
+    xaxis = list(title = "Time of Day"),
+    yaxis = list(title = "", tickfont = list(size = 10)),
+    margin = list(l = 150)
+  )
+p6
+```
+
+# Hotspot Map
+
+## Row
+
+### Crime Hotspot Clusters (K-Means, K=5)
+
+```{r}
+set.seed(42)
+map_sample <- coords_clusters %>%
+  sample_n(min(10000, nrow(coords_clusters)))
+
+cluster_colors <- c("#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6")
+cluster_pal <- colorFactor(cluster_colors, domain = 1:5)
+
+leaflet(map_sample) %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  addCircleMarkers(
+    lng = ~Longitude,
+    lat = ~Latitude,
+    radius = 3,
+    color = ~cluster_pal(Cluster),
+    fillOpacity = 0.6,
+    stroke = FALSE,
+    popup = ~paste0(
+      "<strong>Crime Type:</strong> ", PrimaryType, "<br>",
+      "<strong>Cluster:</strong> ", Cluster, "<br>",
+      "<strong>Location:</strong> ", round(Latitude, 4), ", ", round(Longitude, 4)
+    )
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = cluster_pal,
+    values = 1:5,
+    title = "Cluster Zone",
+    opacity = 0.8
+  ) %>%
+  setView(lng = -87.68, lat = 41.85, zoom = 11)
+```
+
+# ML Results
+
+## Row {data-height=500}
+
+### Random Forest: Confusion Matrix
+
+```{r}
+conf_matrix <- rf_model$confusion
+# Remove class.error column for display
+conf_display <- conf_matrix[, 1:(ncol(conf_matrix) - 1)]
+
+# Create a styled table
+knitr::kable(
+  conf_matrix,
+  caption = "Random Forest Confusion Matrix (Arrest Prediction)",
+  format = "html",
+  align = "c"
+) %>%
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center",
+    font_size = 14
+  )
+```
+
+### Random Forest: Feature Importance
+
+```{r}
+importance_df <- data.frame(
+  Feature = rownames(rf_model$importance),
+  Importance = rf_model$importance[, "MeanDecreaseGini"]
+) %>%
+  arrange(desc(Importance)) %>%
+  mutate(Feature = reorder(Feature, Importance))
+
+p7 <- plot_ly(
+  importance_df,
+  x = ~Importance,
+  y = ~Feature,
+  type = "bar",
+  orientation = "h",
+  marker = list(
+    color = ~Importance,
+    colorscale = list(c(0, "#667eea"), c(1, "#764ba2")),
+    line = list(color = "rgba(0,0,0,0.2)", width = 0.5)
+  ),
+  text = ~paste0(Feature, ": ", round(Importance, 1)),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = list(text = "Feature Importance (Mean Decrease Gini)", font = list(size = 16)),
+    xaxis = list(title = "Mean Decrease Gini"),
+    yaxis = list(title = ""),
+    margin = list(l = 120)
+  )
+p7
+```
+
+## Row {data-height=500}
+
+### Linear Regression Note
+
+```{r}
+htmltools::div(
+  style = "padding: 30px; font-size: 16px; line-height: 1.8;",
+  htmltools::h3("Linear Regression Analysis", style = "color: #2c3e50;"),
+  htmltools::hr(),
+  htmltools::p(
+    htmltools::strong("R² = 0.083"), " — The linear regression model explains only ~8.3% of the variance in arrest outcomes."
+  ),
+  htmltools::h4("Why is R² so low?", style = "color: #e74c3c; margin-top: 20px;"),
+  htmltools::tags$ul(
+    style = "font-size: 15px;",
+    htmltools::tags$li("Crime arrest outcomes are inherently non-linear and depend on complex interactions between features."),
+    htmltools::tags$li("Linear regression assumes a linear relationship between predictors and the response, which does not hold well for binary classification tasks like arrest prediction."),
+    htmltools::tags$li("Many important factors influencing arrests (e.g., police response time, evidence availability, witness cooperation) are not captured in the dataset."),
+    htmltools::tags$li("The Random Forest model (non-linear) significantly outperforms linear regression, confirming non-linear relationships in the data.")
+  ),
+  htmltools::h4("Key Takeaway", style = "color: #27ae60; margin-top: 20px;"),
+  htmltools::p("Non-linear models like Random Forest are far more suitable for this type of classification problem. The low R² of linear regression validates the choice of ensemble methods for this use case.")
+)
+```
+
+### K-Means: Cluster Size Distribution
+
+```{r}
+cluster_sizes <- data.frame(
+  Cluster = paste("Cluster", 1:5),
+  Size = kmeans_model$size
+)
+
+p8 <- plot_ly(
+  cluster_sizes,
+  labels = ~Cluster,
+  values = ~Size,
+  type = "pie",
+  textposition = "inside",
+  textinfo = "label+percent",
+  marker = list(
+    colors = c("#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6"),
+    line = list(color = "#FFFFFF", width = 2)
+  ),
+  hovertemplate = "%{label}<br>Size: %{value:,}<br>Percentage: %{percent}<extra></extra>"
+) %>%
+  layout(
+    title = list(text = "K-Means Cluster Size Distribution (K=5)", font = list(size = 16)),
+    showlegend = TRUE
+  )
+p8
+```
